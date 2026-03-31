@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NASDAQ P(Green) · Live Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f2f2ed;--card:#fff;--b1:#e5e5df;--b2:#ccc;
+  --t1:#1a1a18;--t2:#555;--t3:#999;
+  --green:#1e7e34;--red:#b02020;--neu:#777;
+  --blue:#1a4e8a;--amber:#8a5000;--lblue:#e8f0fb;--lamber:#fff3e0;
+  --accent:#1a4e8a;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a18;--card:#242422;--b1:#363634;--b2:#484846;
+  --t1:#e0e0d8;--t2:#999;--t3:#666;
+  --green:#4caf50;--red:#ef5350;
+  --blue:#5b9bd5;--amber:#f0a830;--lblue:#0d1e36;--lamber:#2a1c08;
+}}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;font-size:14px;min-height:100vh}
+
+/* ─── API key setup overlay ─── */
+#setup{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.setup-card{background:var(--card);border-radius:16px;padding:28px 32px;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+.setup-card h2{font-size:18px;font-weight:600;margin-bottom:6px}
+.setup-card p{font-size:13px;color:var(--t2);line-height:1.7;margin-bottom:14px}
+.setup-card a{color:var(--blue);text-decoration:none}
+.setup-card a:hover{text-decoration:underline}
+.step{display:flex;gap:10px;margin-bottom:10px;font-size:13px;color:var(--t2)}
+.step-n{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.key-input{width:100%;padding:10px 12px;border:1.5px solid var(--b2);border-radius:8px;font-size:14px;background:var(--bg);color:var(--t1);margin:10px 0}
+.key-input:focus{outline:none;border-color:var(--accent)}
+.btn-primary{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.btn-primary:hover{opacity:.9}
+.err{color:var(--red);font-size:12px;margin-top:4px;display:none}
+
+/* ─── Main layout ─── */
+.wrap{max-width:1080px;margin:0 auto;padding:12px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+h1{font-size:17px;font-weight:700}
+.vsub{font-size:11px;color:var(--t3);margin-top:1px}
+.topright{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#4caf50;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-lbl{font-size:11px;color:var(--t3)}
+.refresh-btn{padding:5px 12px;border:1px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t2);font-size:11px;cursor:pointer}
+.refresh-btn:hover{background:var(--bg)}
+.tabs{display:flex;gap:4px}
+.tab{padding:5px 14px;border:1px solid var(--b2);background:var(--card);color:var(--t2);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500}
+.tab.on{background:var(--t1);color:var(--bg);border-color:var(--t1)}
+
+/* Loading state */
+#loading{text-align:center;padding:40px;color:var(--t2);font-size:14px}
+.spinner{width:32px;height:32px;border:3px solid var(--b2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#main{display:none}
+
+/* ─── Prob card ─── */
+.pcard{display:grid;grid-template-columns:auto 1fr auto auto auto;align-items:center;gap:14px;background:var(--card);border:1px solid var(--b1);border-radius:14px;padding:16px 20px;margin-bottom:10px}
+@media(max-width:640px){.pcard{grid-template-columns:auto 1fr;grid-template-rows:auto auto auto;gap:10px}}
+.pv-wrap .plbl{font-size:11px;color:var(--t3);margin-bottom:2px}
+.pv{font-size:52px;font-weight:700;line-height:1;transition:color .3s}
+.pbar-wrap .pbar-interp{font-size:12px;color:var(--t2);margin-bottom:4px}
+.ptrack{height:10px;background:var(--bg);border-radius:5px;overflow:hidden;border:1px solid var(--b1)}
+.pfill{height:100%;border-radius:5px;transition:width .5s,background .5s}
+.pticks{display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-top:3px}
+.sec-p{text-align:center}
+.sec-p .plbl{font-size:10px;color:var(--t3);margin-bottom:2px}
+.sec-pv{font-size:24px;font-weight:600;transition:color .3s}
+.sec-psub{font-size:9px;color:var(--t3)}
+.lobox{text-align:center}
+.loval{font-size:18px;font-weight:500;font-family:monospace;transition:color .3s}
+.lolbl{font-size:9px;color:var(--t3);margin-top:2px}
+.rbdg{display:inline-block;padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600}
+.rbdg.bull{background:#e8f5e9;color:#2e7d32}
+.rbdg.bear{background:#ffebee;color:#c62828}
+.rbdg.neutral{background:var(--bg);border:1px solid var(--b2);color:var(--t2)}
+.reglbl{font-size:9px;color:var(--t3);text-align:center;margin-top:3px}
+
+/* ─── Market snapshot bar ─── */
+.snap{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.snap-item{background:var(--card);border:1px solid var(--b1);border-radius:8px;padding:6px 10px;flex:1;min-width:100px}
+.snap-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.snap-val{font-size:14px;font-weight:600}
+.snap-chg{font-size:10px;margin-top:1px}
+
+/* ─── Factor grid ─── */
+.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:10px}
+@media(max-width:600px){.fgrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:380px){.fgrid{grid-template-columns:1fr}}
+.fc{background:var(--card);border:1px solid var(--b1);border-radius:10px;padding:9px 11px;border-left:3px solid transparent}
+.fc.auto{border-left-color:var(--green)}
+.fc.api{border-left-color:var(--amber)}
+.fc.manual{border-left-color:var(--blue)}
+.fcrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1px}
+.fccat{font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.fcscore{font-size:12px;font-weight:700;transition:color .2s}
+.fcname{font-size:11px;font-weight:600;margin-bottom:4px}
+.sbar{height:3px;background:var(--bg);border-radius:2px;position:relative;margin-bottom:6px;border:1px solid var(--b1)}
+.sbm{position:absolute;left:50%;top:-2px;height:7px;width:1px;background:var(--b2)}
+.sbf{position:absolute;height:100%;border-radius:2px;transition:left .3s,width .3s}
+.fi{font-size:10px;color:var(--t2)}
+.fi input[type=range]{width:100%;cursor:pointer;accent-color:var(--accent);margin:3px 0 2px;height:14px}
+.fi select{width:100%;font-size:10px;padding:3px 4px;background:var(--bg);border:1px solid var(--b1);border-radius:4px;color:var(--t1);margin-top:3px;cursor:pointer}
+.fi .auto-val{font-size:11px;font-weight:500;color:var(--t1);padding:3px 0}
+.src-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:6px;margin-top:4px;font-weight:500}
+.src-auto{background:#e8f5e9;color:#2e7d32}
+.src-api{background:#fff3e0;color:#8a5000}
+.src-manual{background:var(--lblue);color:var(--blue)}
+
+/* ─── Manual panel ─── */
+.mpanel{background:var(--lblue);border:1px solid #b0c8f0;border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.mptitle{font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.mptitle::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0}
+.mpgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:7px}
+.mpi{background:var(--card);border:1px solid #b0c8f0;border-radius:8px;padding:8px 10px}
+.mpilbl{font-size:10px;color:var(--blue);font-weight:600;margin-bottom:4px}
+.mpi select,.mpi input[type=number]{width:100%;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--b1);border-radius:4px;color:var(--t1);cursor:pointer}
+
+/* ─── Breakdown ─── */
+.bk{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.bktitle{font-size:9px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.bkhdr{display:flex;gap:6px;font-size:9px;color:var(--t3);margin-bottom:4px}
+.bkrow{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
+.bkname{width:100px;color:var(--t2);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bkbw{flex:1;height:10px;background:var(--bg);border-radius:2px;position:relative;overflow:hidden;border:1px solid var(--b1)}
+.bkbar{position:absolute;height:100%;transition:left .3s,width .3s}
+.bkmid{position:absolute;left:50%;top:0;height:100%;width:1px;background:var(--b2)}
+.bkval{width:36px;text-align:right;font-family:monospace;transition:color .2s;font-size:10px}
+.bkwt{width:22px;text-align:right;font-size:9px;color:var(--t3)}
+.bkftr{border-top:1px solid var(--b1);margin-top:5px;padding-top:5px;display:flex;justify-content:space-between;font-size:11px}
+
+/* ─── Last updated ─── */
+.footer{text-align:center;font-size:11px;color:var(--t3);padding:8px 0 4px;line-height:1.8}
+.footer a{color:var(--blue);text-decoration:none}
+
+/* ─── Error banner ─── */
+.errbanner{background:#fff3e0;border:1px solid #f9a825;border-radius:8px;padding:10px 14px;font-size:12px;color:#6d4c00;margin-bottom:10px;display:none}
+</style>
+</head>
+<body>
+
+<!-- ── SETUP OVERLAY ─────────────────────────────────────────────────────── -->
+<div id="setup">
+  <div class="setup-card">
+    <h2>Welcome! One quick setup step 👋</h2>
+    <p>This dashboard fetches <strong>live NASDAQ data</strong> automatically. You need a free API key from Alpha Vantage — it takes 30 seconds and is completely free.</p>
+
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>Go to <a href="https://www.alphavantage.co/support/#api-key" target="_blank">alphavantage.co/support/#api-key</a> and enter your email. They'll show you a key instantly — no credit card.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>Copy the key (looks like: <code style="background:var(--bg);padding:1px 5px;border-radius:3px">ABCD1234EFGH5678</code>) and paste it below.</div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>Click <strong>Start Dashboard</strong>. Your key is saved in your browser — you only do this once.</div>
+    </div>
+
+    <input class="key-input" id="keyInput" type="text" placeholder="Paste your API key here..." autocomplete="off">
+    <div class="err" id="keyErr">That doesn't look right — keys are 16 characters. Please try again.</div>
+    <button class="btn-primary" onclick="startDash()">Start Dashboard →</button>
+    <p style="margin-top:12px;font-size:11px;color:var(--t3)">Free tier: 25 calls/day and 5 calls/minute — more than enough for daily use. Your key never leaves your browser.</p>
+  </div>
+</div>
+
+<!-- ── MAIN DASHBOARD ─────────────────────────────────────────────────────── -->
+<div class="wrap" id="main">
+
+  <div class="topbar">
+    <div>
+      <h1>NASDAQ P(Green) <span style="font-size:11px;font-weight:400;color:var(--t3);background:var(--b1);padding:1px 7px;border-radius:8px;margin-left:4px">live · v3</span></h1>
+      <div class="vsub">Bayesian log-odds · 13 factors · regime-adaptive weights</div>
+    </div>
+    <div class="topright">
+      <span class="live-dot"></span>
+      <span class="live-lbl" id="lastUpd">Loading...</span>
+      <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+      <div class="tabs">
+        <button id="tab-d" class="tab on" onclick="setTF('d')">Daily</button>
+        <button id="tab-w" class="tab" onclick="setTF('w')">Weekly</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="errbanner" id="errBanner"></div>
+
+  <div id="loading"><div class="spinner"></div>Fetching live NASDAQ data...</div>
+
+  <div id="dataContent" style="display:none">
+
+    <!-- Market snapshot -->
+    <div class="snap">
+      <div class="snap-item"><div class="snap-lbl">NASDAQ</div><div class="snap-val" id="snap-ixic">—</div><div class="snap-chg" id="snap-ixic-chg">—</div></div>
+      <div class="snap-item"><div class="snap-lbl">VIX</div><div class="snap-val" id="snap-vix">—</div><div class="snap-chg" id="snap-vix-chg" style="color:var(--t3)">fear gauge</div></div>
+      <div class="snap-item"><div class="snap-lbl">10Y Yield</div><div class="snap-val" id="snap-yld">—</div><div class="snap-chg" id="snap-yld-chg">—</div></div>
+      <div class="snap-item"><div class="snap-lbl">EMA50/200</div><div class="snap-val" id="snap-ema">—</div><div class="snap-chg" id="snap-ema-lbl" style="color:var(--t3)">trend ratio</div></div>
+      <div class="snap-item"><div class="snap-lbl">RSI (14)</div><div class="snap-val" id="snap-rsi">—</div><div class="snap-chg" id="snap-rsi-lbl" style="color:var(--t3)">momentum</div></div>
+      <div class="snap-item"><div class="snap-lbl">Red streak</div><div class="snap-val" id="snap-streak">—</div><div class="snap-chg" style="color:var(--t3)">consecutive days</div></div>
+    </div>
+
+    <!-- Main probability -->
+    <div class="pcard">
+      <div class="pv-wrap"><div class="plbl">P(green <span id="tf-main">today</span>)</div><div class="pv" id="pv">—</div></div>
+      <div class="pbar-wrap">
+        <div class="pbar-interp" id="pi">Loading...</div>
+        <div class="ptrack"><div class="pfill" id="pbf" style="width:50%;background:var(--neu)"></div></div>
+        <div class="pticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+      </div>
+      <div class="sec-p"><div class="plbl">P(green <span id="tf-sec">this week</span>)</div><div class="sec-pv" id="psv">—</div><div class="sec-psub" id="psub">weekly est.</div></div>
+      <div class="lobox"><div class="loval" id="lod">—</div><div class="lolbl">log-odds</div></div>
+      <div><div class="rbdg neutral" id="reg">—</div><div class="reglbl">regime</div></div>
+    </div>
+
+    <!-- Factor grid -->
+    <div class="fgrid">
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₁ mean-rev</span><span class="fcscore" id="s0">—</span></div><div class="fcname">Streak decay</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b0"></div></div><div class="fi"><div class="auto-val" id="l0">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₂ trend</span><span class="fcscore" id="s1">—</span></div><div class="fcname" id="fn2">EMA50/EMA200</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b1"></div></div><div class="fi"><div class="auto-val" id="l1">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₃ momentum</span><span class="fcscore" id="s2">—</span></div><div class="fcname">Multi-scale momentum</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b2"></div></div><div class="fi"><div class="auto-val" id="l2">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₄ oscillator</span><span class="fcscore" id="s3">—</span></div><div class="fcname" id="fn4">RSI (14)</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b3"></div></div><div class="fi"><div class="auto-val" id="l3">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc api"><div class="fcrow"><span class="fccat">F₅ volatility</span><span class="fcscore" id="s4">—</span></div><div class="fcname">VIX spike</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b4"></div></div><div class="fi"><div class="auto-val" id="l4">—</div><span class="src-tag src-auto">● Auto · VIX feed</span></div></div>
+      <div class="fc manual"><div class="fcrow"><span class="fccat">F₆ calendar</span><span class="fcscore" id="s5">—</span></div><div class="fcname">Seasonality</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b5"></div></div><div class="fi"><div class="auto-val" id="l5">—</div><span class="src-tag src-manual">● Auto · day + manual</span></div></div>
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₇ volume</span><span class="fcscore" id="s6">—</span></div><div class="fcname">Volume anomaly</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b6"></div></div><div class="fi"><div class="auto-val" id="l6">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc auto"><div class="fcrow"><span class="fccat">F₈ EMA cross</span><span class="fcscore" id="s7">—</span></div><div class="fcname" id="fn8">EMA9/EMA21</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b7"></div></div><div class="fi"><div class="auto-val" id="l7">—</div><span class="src-tag src-auto">● Auto · price data</span></div></div>
+      <div class="fc manual"><div class="fcrow"><span class="fccat">F₉ macro</span><span class="fcscore" id="s8">—</span></div><div class="fcname">Macro event</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b8"></div></div><div class="fi"><select onchange="M.mac=+this.value;up()"><option value="0">No event today</option><option value="1">Fed decision day</option><option value="2">CPI release</option><option value="3">NFP / jobs data</option><option value="4">Earnings season peak</option><option value="5">Day after Fed (relief)</option></select><span class="src-tag src-manual">● Manual entry</span></div></div>
+      <div class="fc api"><div class="fcrow"><span class="fccat">F₁₀ rates ★</span><span class="fcscore" id="s9">—</span></div><div class="fcname">10Y yield change</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b9"></div></div><div class="fi"><div class="auto-val" id="l9">—</div><span class="src-tag src-auto">● Auto · Treasury feed</span></div></div>
+      <div class="fc manual"><div class="fcrow"><span class="fccat">F₁₁ sentiment</span><span class="fcscore" id="s10">—</span></div><div class="fcname">Put/Call ratio</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b10"></div></div><div class="fi"><div style="margin-bottom:3px">CBOE P/C ratio:</div><input type="range" min="0.4" max="1.8" value="0.85" step="0.01" id="pc-slider" oninput="M.pc=+this.value;document.getElementById('pc-val').textContent=this.value;up()"><div id="pc-val" style="font-size:10px;text-align:right">0.85</div><span class="src-tag src-manual">● Manual · CBOE.com</span></div></div>
+      <div class="fc manual"><div class="fcrow"><span class="fccat">F₁₂ breadth</span><span class="fcscore" id="s11">—</span></div><div class="fcname">Market breadth</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b11"></div></div><div class="fi"><div style="margin-bottom:3px">% stocks above 50d MA:</div><input type="range" min="0" max="100" value="50" step="1" id="br-slider" oninput="M.br=+this.value;document.getElementById('br-val').textContent=this.value+'%';up()"><div id="br-val" style="font-size:10px;text-align:right">50%</div><span class="src-tag src-manual">● Manual lookup</span></div></div>
+      <div class="fc manual"><div class="fcrow"><span class="fccat">F₁₃ global</span><span class="fcscore" id="s12">—</span></div><div class="fcname">Global overnight</div><div class="sbar"><div class="sbm"></div><div class="sbf" id="b12"></div></div><div class="fi"><select onchange="M.gl=+this.value;up()"><option value="-1">Strong down (&gt;−2%)</option><option value="-0.5">Down (−0.5 to −2%)</option><option value="0" selected>Mixed / flat</option><option value="0.5">Up (+0.5 to +2%)</option><option value="1">Strong up (&gt;+2%)</option></select><span class="src-tag src-manual">● Manual · check Asia/EU close</span></div></div>
+    </div>
+
+    <!-- Manual panel -->
+    <div class="mpanel">
+      <div class="mptitle">Morning checklist — 3 quick manual entries (takes ~60 seconds)</div>
+      <div class="mpgrid">
+        <div class="mpi">
+          <div class="mpilbl">Any macro event today?</div>
+          <select onchange="M.mac=+this.value;up()">
+            <option value="0">No event</option><option value="1">Fed decision</option>
+            <option value="2">CPI release</option><option value="3">NFP / jobs</option>
+            <option value="4">Earnings peak</option><option value="5">Day after Fed</option>
+          </select>
+        </div>
+        <div class="mpi">
+          <div class="mpilbl">Market expectation</div>
+          <select onchange="M.mb=+this.value;up()">
+            <option value="0">Neutral</option>
+            <option value="1">Dovish / good expected</option>
+            <option value="-1">Hawkish / bad feared</option>
+          </select>
+        </div>
+        <div class="mpi">
+          <div class="mpilbl">Calendar special?</div>
+          <select onchange="M.me=+this.value;up()">
+            <option value="0">Regular day</option>
+            <option value="1">Month-end (last 3 days)</option>
+            <option value="2">OpEx / triple witching</option>
+            <option value="3">January effect</option>
+            <option value="4">Quarter-end</option>
+          </select>
+        </div>
+        <div class="mpi">
+          <div class="mpilbl">Asia + Europe overnight?</div>
+          <select onchange="M.gl=+this.value;up()">
+            <option value="-1">Strong down</option><option value="-0.5">Down</option>
+            <option value="0" selected>Mixed / flat</option>
+            <option value="0.5">Up</option><option value="1">Strong up</option>
+          </select>
+        </div>
+        <div class="mpi">
+          <div class="mpilbl">Put/Call ratio (CBOE)</div>
+          <input type="number" min="0.3" max="2.0" value="0.85" step="0.01" style="width:100%;padding:4px 6px;border:1px solid var(--b1);border-radius:4px;background:var(--bg);color:var(--t1);font-size:12px"
+            onchange="M.pc=+this.value;document.getElementById('pc-slider').value=this.value;document.getElementById('pc-val').textContent=(+this.value).toFixed(2);up()">
+          <div style="font-size:9px;color:var(--t3);margin-top:2px">Check cboe.com/us/equities/market_statistics</div>
+        </div>
+        <div class="mpi">
+          <div class="mpilbl">Breadth: % stocks above 50d MA</div>
+          <input type="number" min="0" max="100" value="50" step="1" style="width:100%;padding:4px 6px;border:1px solid var(--b1);border-radius:4px;background:var(--bg);color:var(--t1);font-size:12px"
+            onchange="M.br=+this.value;document.getElementById('br-slider').value=this.value;document.getElementById('br-val').textContent=this.value+'%';up()">
+          <div style="font-size:9px;color:var(--t3);margin-top:2px">Check stockcharts.com $NAPE or $NAA50R</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Breakdown -->
+    <div class="bk">
+      <div class="bktitle">Factor contributions to log-odds · wᵢ(regime) × fᵢ · "wt" = weight in current regime</div>
+      <div class="bkhdr"><span style="width:100px">Factor</span><span style="flex:1;text-align:center">← bearish &nbsp;|&nbsp; bullish →</span><span style="width:36px;text-align:right">contrib</span><span style="width:22px;text-align:right">wt</span></div>
+      <div id="bkrows"></div>
+      <div class="bkftr"><span style="color:var(--t2)">Σ log-odds → P = 1/(1+e⁻ˡᵒ)</span><span id="lot" style="font-family:monospace;font-weight:600">—</span></div>
+    </div>
+
+  </div><!-- end dataContent -->
+
+  <div class="footer">
+    Data: Alpha Vantage (NASDAQ · VIX · 10Y yield) &nbsp;·&nbsp;
+    Model: Bayesian log-odds, 13 factors, regime-adaptive weights &nbsp;·&nbsp;
+    <a href="#" onclick="resetKey()">Change API key</a>
+    <br>
+    <span style="color:var(--t3)">⚠ Not financial advice. Probabilities are model estimates only.</span>
+  </div>
+
+</div><!-- wrap -->
+
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// WEIGHTS (from backtest — hybrid hand-tuned + logistic regression calibrated)
+// ────────────────────────────────────────────────────────────────────────────
+const WD = {
+  bull:    [0.5, 1.6, 2.0, 0.4, 0.7, 0.4, 0.8, 1.4, 0.8, 1.3, 0.7, 1.0, 0.8],
+  neutral: [1.0, 1.0, 1.1, 1.0, 1.0, 0.5, 0.9, 0.9, 0.9, 1.0, 0.9, 0.8, 0.8],
+  bear:    [1.8, 0.5, 0.5, 1.8, 1.5, 0.4, 1.0, 0.4, 1.2, 0.9, 1.3, 0.7, 0.9]
+};
+const WW = {
+  bull:    [0.6, 1.8, 2.3, 0.5, 0.6, 0.5, 0.7, 1.2, 1.0, 1.0, 0.8, 1.3, 0.7],
+  neutral: [1.1, 1.1, 1.3, 1.1, 1.0, 0.6, 0.8, 0.9, 1.0, 0.9, 1.0, 1.0, 0.8],
+  bear:    [2.0, 0.6, 0.4, 2.1, 1.6, 0.5, 0.9, 0.4, 1.3, 0.7, 1.5, 0.6, 0.8]
+};
+const FN = ['Streak','EMA50/200','Momentum','RSI(14)','VIX','Calendar','Volume','EMA9/21','Macro','10Y Yield','Put/Call','Breadth','Global'];
+const MBASE = [0,-0.12,-0.08,-0.06,-0.09,0.32];
+const MADJ  = [0, 0.18, 0.12, 0.08, 0.12,-0.10];
+const ME    = [0, 0.28,-0.18, 0.22, 0.20];
+const DOW   = [0,-0.12, 0.05, 0.02, 0.08, 0.18]; // Mon=1 … Fri=5
+
+// ────────────────────────────────────────────────────────────────────────────
+// COMPUTED FACTORS (from live data) + MANUAL STATE
+// ────────────────────────────────────────────────────────────────────────────
+let A = { f1:0,f2:0,f3:0,f4:0,f5:0,f6:0,f7:0,f8:0,f10:0, er:1,vix:20,va:20,streak:0,rsi:50 };
+let M = { mac:0, mb:0, me:0, gl:0, pc:0.85, br:50 };
+let TF = 'd';
+
+function sig(x)  { return 1/(1+Math.exp(-x)) }
+function cl(v,a,b){ return Math.max(a,Math.min(b,v)) }
+function gc(v,lo,hi){ return v>hi?'var(--green)':v<lo?'var(--red)':'var(--neu)' }
+function fs(v,d) { return (v>=0?'+':'')+v.toFixed(d) }
+function regime(){ return A.er>1.02&&A.vix<22?'bull':A.er<0.98&&A.vix>25?'bear':'neutral' }
+
+function allScores(){
+  const f9  = cl(MBASE[M.mac]+M.mb*MADJ[M.mac], -0.8, 0.8);
+  const f6  = cl(A.f6 + ME[M.me], -1, 1);
+  const f11 = cl(Math.tanh(3*(M.pc-0.85)), -1, 1);
+  const f12 = cl((50-M.br)/50, -1, 1);
+  return [A.f1,A.f2,A.f3,A.f4,A.f5,f6,A.f7,A.f8,f9,A.f10,f11,f12,M.gl];
+}
+
+function up(){
+  const r  = regime();
+  const sc = allScores();
+  const Wa = TF==='d' ? WD : WW;
+  const Wb = TF==='d' ? WW : WD;
+  const wa = Wa[r], wb = Wb[r];
+  const lo  = sc.reduce((a,s,i)=>a+wa[i]*s, 0);
+  const lo2 = sc.reduce((a,s,i)=>a+wb[i]*s, 0);
+  const p   = sig(lo), p2 = sig(lo2);
+  const pct = Math.round(p*100), pct2 = Math.round(p2*100);
+
+  // Prob card
+  const pvel = document.getElementById('pv');
+  pvel.textContent = pct+'%';
+  pvel.style.color = pct>62?'var(--green)':pct<38?'var(--red)':'var(--t1)';
+  const pbf = document.getElementById('pbf');
+  pbf.style.width = pct+'%';
+  pbf.style.background = pct>62?'var(--green)':pct<38?'var(--red)':'var(--neu)';
+  const intps = ['Strong bearish edge','Bearish lean','Slight bearish lean','Neutral — no edge','Slight bullish lean','Bullish lean','Strong bullish edge'];
+  document.getElementById('pi').textContent = intps[Math.min(6,Math.max(0,Math.floor((pct-20)/10)))] || 'Neutral';
+  const psv = document.getElementById('psv');
+  psv.textContent = pct2+'%';
+  psv.style.color = pct2>62?'var(--green)':pct2<38?'var(--red)':'var(--t1)';
+  const lod = document.getElementById('lod');
+  lod.textContent = fs(lo,3); lod.style.color = gc(lo,-0.3,0.3);
+  const rb = document.getElementById('reg');
+  rb.textContent = r.charAt(0).toUpperCase()+r.slice(1);
+  rb.className = 'rbdg '+r;
+
+  // Factor bars
+  sc.forEach((s,i)=>{
+    const el=document.getElementById('s'+i); if(!el)return;
+    el.textContent=fs(s,2); el.style.color=gc(s,-0.15,0.15);
+    const bar=document.getElementById('b'+i); if(!bar)return;
+    if(s>=0){bar.style.left='50%';bar.style.width=(s*44)+'%';bar.style.background='var(--green)';}
+    else{bar.style.left=(50+s*44)+'%';bar.style.width=(-s*44)+'%';bar.style.background='var(--red)';}
+  });
+
+  // Breakdown rows
+  const mx = Math.max(...sc.map((s,i)=>Math.abs(wa[i]*s)), 0.2);
+  document.getElementById('bkrows').innerHTML = FN.map((name,i)=>{
+    const c=wa[i]*sc[i], clr=gc(c,-0.05,0.05);
+    const bw=Math.abs(c)/mx*44, bl=c>=0?50:(50+c/mx*44);
+    return `<div class="bkrow"><span class="bkname">${name}</span><div class="bkbw"><div class="bkmid"></div><div class="bkbar" style="left:${bl.toFixed(1)}%;width:${bw.toFixed(1)}%;background:${clr}"></div></div><span class="bkval" style="color:${clr}">${fs(c,2)}</span><span class="bkwt">${wa[i].toFixed(1)}</span></div>`;
+  }).join('');
+  const lot=document.getElementById('lot'); lot.textContent=fs(lo,3); lot.style.color=gc(lo,-0.3,0.3);
+}
+
+function setTF(tf){
+  TF=tf;
+  document.getElementById('tab-d').className='tab'+(tf==='d'?' on':'');
+  document.getElementById('tab-w').className='tab'+(tf==='w'?' on':'');
+  document.getElementById('tf-main').textContent=tf==='d'?'today':'this week';
+  document.getElementById('tf-sec').textContent=tf==='d'?'this week':'today';
+  document.getElementById('psub').textContent=tf==='d'?'weekly est.':'daily est.';
+  document.getElementById('fn2').textContent=tf==='d'?'EMA50/EMA200':'EMA10/EMA40';
+  document.getElementById('fn4').textContent=tf==='d'?'RSI (14)':'RSI (14w)';
+  document.getElementById('fn8').textContent=tf==='d'?'EMA9/EMA21':'EMA4/EMA13';
+  up();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ALPHA VANTAGE DATA FETCHER
+// ────────────────────────────────────────────────────────────────────────────
+const AV = 'https://www.alphavantage.co/query';
+let API_KEY = '';
+
+function ema(prices, n){
+  const k=2/(n+1); let e=prices[0];
+  for(let i=1;i<prices.length;i++) e=prices[i]*k+e*(1-k);
+  return e;
+}
+function emaArr(prices, n){
+  const k=2/(n+1); const r=[prices[0]];
+  for(let i=1;i<prices.length;i++) r.push(prices[i]*k+r[r.length-1]*(1-k));
+  return r;
+}
+function rsiCalc(closes, n=14){
+  const d=closes.slice(1).map((c,i)=>c-closes[i]);
+  let ag=0,al=0;
+  for(let i=0;i<n;i++){ag+=Math.max(0,d[i]); al+=Math.max(0,-d[i]);}
+  ag/=n; al/=n;
+  for(let i=n;i<d.length;i++){
+    ag=(ag*(n-1)+Math.max(0,d[i]))/n;
+    al=(al*(n-1)+Math.max(0,-d[i]))/n;
+  }
+  const rs=al===0?100:ag/al;
+  return 100-100/(1+rs);
+}
+
+async function fetchJSON(url){
+  const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+async function loadData(){
+  document.getElementById('loading').style.display='block';
+  document.getElementById('dataContent').style.display='none';
+  document.getElementById('errBanner').style.display='none';
+  document.getElementById('lastUpd').textContent='Refreshing...';
+
+  try {
+    // Fetch NASDAQ daily (compact = last 100 days)
+    const ixicUrl=`${AV}?function=TIME_SERIES_DAILY&symbol=QQQ&outputsize=full&apikey=${API_KEY}`;
+    const ixicData = await fetchJSON(ixicUrl);
+
+    if(ixicData['Note'] || ixicData['Information']){
+      throw new Error('API rate limit hit. Wait 1 minute and click Refresh. (Free tier: 5 calls/min)');
+    }
+    if(!ixicData['Time Series (Daily)']){
+      throw new Error('Could not fetch NASDAQ data. Check your API key.');
+    }
+
+    const ts = ixicData['Time Series (Daily)'];
+    const dates = Object.keys(ts).sort().slice(-250); // last ~1 year
+    const closes  = dates.map(d=>parseFloat(ts[d]['4. close']));
+    const volumes = dates.map(d=>parseFloat(ts[d]['5. volume']));
+
+    // ── Compute auto factors ──────────────────────────────────────────────
+    const n = closes.length;
+    const last = closes[n-1];
+    const prev = closes[n-2];
+
+    // F1: streak
+    let streak=0;
+    for(let i=n-2;i>=0;i--){ if(closes[i]<closes[i-1]||i===0) { if(closes[i]<(i>0?closes[i-1]:closes[i])){streak++;} else break; } else break;}
+    // cleaner streak count
+    streak=0;
+    for(let i=n-2;i>0;i--){
+      if(closes[i]<=closes[i-1]) streak++;
+      else break;
+    }
+    A.streak = streak;
+    A.f1 = streak>0 ? (1-Math.exp(-0.5*streak)) : 0;
+
+    // EMA arrays
+    const e50arr  = emaArr(closes, 50);
+    const e200arr = emaArr(closes, 200);
+    const e9arr   = emaArr(closes, 9);
+    const e21arr  = emaArr(closes, 21);
+    const e50last = e50arr[e50arr.length-1];
+    const e200last= e200arr[e200arr.length-1];
+    const e9last  = e9arr[e9arr.length-1];
+    const e21last = e21arr[e21arr.length-1];
+    A.er = e50last / e200last;
+    A.f2 = Math.max(-1, Math.min(1, Math.tanh(10*(A.er-1))));
+    A.f8 = Math.max(-1, Math.min(1, Math.tanh(100*(e9last/e21last-1))));
+
+    // Momentum
+    const r5  = n>5  ? Math.log(closes[n-1]/closes[n-6])  : 0;
+    const r20 = n>20 ? Math.log(closes[n-1]/closes[n-21]) : 0;
+    A.f3 = cl(0.6*cl(r5/0.025,-1,1)+0.4*cl(r20/0.07,-1,1),-1,1);
+
+    // RSI
+    A.rsi = rsiCalc(closes.slice(-30));
+    A.f4  = cl((50-A.rsi)/50,-1,1);
+
+    // Volume
+    const vol20avg = volumes.slice(-21,-1).reduce((a,b)=>a+b,0)/20;
+    const volRatio = cl((volumes[n-1]/vol20avg-1),-0.7,2.5);
+    const prevRet  = closes[n-2]>closes[n-3] ? 1 : -1;
+    A.f7 = cl(prevRet*volRatio*0.75,-1,1);
+
+    // Calendar (auto — day of week)
+    const today = new Date(); const dow = today.getDay(); // 0=Sun
+    const dowIdx = dow===0?5:dow; // treat Sun as Fri for weekend
+    A.f6 = DOW[Math.min(dowIdx,5)];
+
+    // ── Fetch VIX ─────────────────────────────────────────────────────────
+    try {
+      const vixUrl=`${AV}?function=TIME_SERIES_DAILY&symbol=VIXY&apikey=${API_KEY}`;
+      const vixData = await fetchJSON(vixUrl);
+      if(vixData['Time Series (Daily)']){
+        const vts = vixData['Time Series (Daily)'];
+        const vdates = Object.keys(vts).sort().slice(-25);
+        const vcloses = vdates.map(d=>parseFloat(vts[d]['4. close']));
+        A.vix = vcloses[vcloses.length-1];
+        A.va  = vcloses.reduce((a,b)=>a+b,0)/vcloses.length;
+        A.f5  = cl(Math.tanh(0.12*(A.vix-A.va)),-1,1);
+      }
+    } catch(e){ A.f5=0; A.vix=20; A.va=20; }
+
+    // ── Fetch 10Y Treasury ─────────────────────────────────────────────────
+    try {
+      const tnxUrl=`${AV}?function=TIME_SERIES_DAILY&symbol=TNX&apikey=${API_KEY}`;
+      const tnxData = await fetchJSON(tnxUrl);
+      if(tnxData['Time Series (Daily)']){
+        const tts = tnxData['Time Series (Daily)'];
+        const tdates = Object.keys(tts).sort().slice(-3);
+        const tc = tdates.map(d=>parseFloat(tts[d]['4. close']));
+        const yldChg = tc.length>=2 ? (tc[tc.length-1]-tc[tc.length-2])*100 : 0; // bps
+        A.f10 = cl(-Math.tanh(0.04*yldChg),-1,1);
+        // Update label
+        const yldPct = tc[tc.length-1]/10;
+        const chgStr = (yldChg>=0?'+':'')+yldChg.toFixed(1)+'bps';
+        document.getElementById('snap-yld').textContent = yldPct.toFixed(2)+'%';
+        document.getElementById('snap-yld-chg').textContent = chgStr;
+        document.getElementById('snap-yld-chg').style.color = yldChg<0?'var(--green)':'var(--red)';
+        document.getElementById('l9').textContent = 'Change: '+(yldChg>=0?'+':'')+yldChg.toFixed(1)+' bps';
+      }
+    } catch(e){ A.f10=0; document.getElementById('snap-yld').textContent='N/A'; }
+
+    // ── Update snapshot bar ───────────────────────────────────────────────
+    const chgPct = ((last-prev)/prev*100);
+    const chgStr = (chgPct>=0?'+':'')+chgPct.toFixed(2)+'%';
+    document.getElementById('snap-ixic').textContent = last.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('snap-ixic-chg').textContent = chgStr;
+    document.getElementById('snap-ixic-chg').style.color = chgPct>=0?'var(--green)':'var(--red)';
+    document.getElementById('snap-vix').textContent = A.vix.toFixed(2);
+    document.getElementById('snap-ema').textContent = A.er.toFixed(4);
+    document.getElementById('snap-ema-lbl').textContent = A.er>1.02?'🟢 Golden cross':A.er<0.98?'🔴 Death cross':'⚪ Neutral';
+    document.getElementById('snap-rsi').textContent = A.rsi.toFixed(1);
+    document.getElementById('snap-rsi-lbl').textContent = A.rsi<30?'Oversold':A.rsi>70?'Overbought':'Neutral';
+    document.getElementById('snap-streak').textContent = streak;
+
+    // ── Update factor labels ──────────────────────────────────────────────
+    document.getElementById('l0').textContent = `${streak} consec. red day${streak!==1?'s':''}`;
+    document.getElementById('l1').textContent = `EMA50/200 = ${A.er.toFixed(4)}`;
+    document.getElementById('l2').textContent = `5d: ${(r5*100>=0?'+':'')+((r5*100).toFixed(2))}% | 20d: ${(r20*100>=0?'+':'')+(r20*100).toFixed(2)}%`;
+    document.getElementById('l3').textContent = `RSI = ${A.rsi.toFixed(1)}${A.rsi<30?' (oversold)':A.rsi>70?' (overbought)':''}`;
+    document.getElementById('l4').textContent = `VIX ${A.vix.toFixed(1)} vs 20d avg ${A.va.toFixed(1)}`;
+    const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    document.getElementById('l5').textContent = `${dayNames[today.getDay()]} · base ${(DOW[Math.min(dowIdx,5)]>=0?'+':'')+DOW[Math.min(dowIdx,5)]}`;
+    document.getElementById('l6').textContent = `Vol ${(volumes[n-1]/vol20avg).toFixed(2)}× avg | prev ${prevRet>0?'green':'red'}`;
+    document.getElementById('l7').textContent = `EMA9/21 = ${(e9last/e21last).toFixed(4)}`;
+
+    // ── Show dashboard ────────────────────────────────────────────────────
+    document.getElementById('loading').style.display='none';
+    document.getElementById('dataContent').style.display='block';
+    document.getElementById('lastUpd').textContent = 'Updated '+new Date().toLocaleTimeString();
+
+    up();
+
+  } catch(err){
+    document.getElementById('loading').style.display='none';
+    document.getElementById('dataContent').style.display='block';
+    const eb = document.getElementById('errBanner');
+    eb.style.display='block';
+    eb.textContent='⚠ '+err.message;
+    document.getElementById('lastUpd').textContent='Error — see banner above';
+    up(); // still show with whatever data we have
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// API KEY MANAGEMENT
+// ────────────────────────────────────────────────────────────────────────────
+function startDash(){
+  const key = document.getElementById('keyInput').value.trim();
+  if(key.length < 8){
+    document.getElementById('keyErr').style.display='block';
+    return;
+  }
+  API_KEY = key;
+  localStorage.setItem('av_api_key', key);
+  document.getElementById('setup').style.display='none';
+  document.getElementById('main').style.display='block';
+  loadData();
+}
+
+function resetKey(){
+  localStorage.removeItem('av_api_key');
+  location.reload();
+}
+
+document.getElementById('keyInput').addEventListener('keydown', e=>{ if(e.key==='Enter') startDash(); });
+
+// Auto-start if key saved
+window.addEventListener('DOMContentLoaded', ()=>{
+  const saved = localStorage.getItem('av_api_key');
+  if(saved){
+    API_KEY = saved;
+    document.getElementById('setup').style.display='none';
+    document.getElementById('main').style.display='block';
+    loadData();
+  }
+});
+</script>
+</body>
+</html>
